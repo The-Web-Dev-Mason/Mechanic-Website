@@ -1,369 +1,418 @@
-document.addEventListener('DOMContentLoaded', function() {
-    // --- Navigation & Mobile Menu ---
-    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
-    const navMenu = document.querySelector('.nav-menu');
-    const navbar = document.querySelector('.navbar');
-    
-    if(mobileMenuBtn) {
+document.addEventListener('DOMContentLoaded', function () {
+
+    // ================================================
+    // NAVBAR — scroll effect & mobile menu
+    // ================================================
+    const navbar         = document.querySelector('.navbar');
+    const mobileMenuBtn  = document.querySelector('.mobile-menu-btn');
+    const navMenu        = document.querySelector('.nav-menu');
+    const navOverlay     = document.querySelector('.nav-overlay');
+
+    function openMenu() {
+        navMenu.classList.add('active');
+        navOverlay.classList.add('active');
+        document.body.classList.add('menu-open');
+        mobileMenuBtn.setAttribute('aria-expanded', 'true');
+        mobileMenuBtn.setAttribute('aria-label', 'Close navigation menu');
+        mobileMenuBtn.querySelector('i').className = 'fas fa-times';
+    }
+
+    function closeMenu() {
+        navMenu.classList.remove('active');
+        navOverlay.classList.remove('active');
+        document.body.classList.remove('menu-open');
+        mobileMenuBtn.setAttribute('aria-expanded', 'false');
+        mobileMenuBtn.setAttribute('aria-label', 'Open navigation menu');
+        mobileMenuBtn.querySelector('i').className = 'fas fa-bars';
+    }
+
+    if (mobileMenuBtn) {
         mobileMenuBtn.addEventListener('click', () => {
-            navMenu.classList.toggle('active');
-            mobileMenuBtn.classList.toggle('active');
-            document.body.classList.toggle('menu-open'); // Prevent scroll
+            const isOpen = navMenu.classList.contains('active');
+            isOpen ? closeMenu() : openMenu();
         });
     }
 
-    // Close mobile menu when clicking a link
+    if (navOverlay) {
+        navOverlay.addEventListener('click', closeMenu);
+    }
+
+    // Close menu when clicking any nav link
     document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', () => {
-            navMenu.classList.remove('active');
-            mobileMenuBtn.classList.remove('active');
-            document.body.classList.remove('menu-open');
-        });
+        link.addEventListener('click', closeMenu);
     });
 
     // Navbar scroll effect
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 50) {
-            navbar.classList.add('scrolled');
-        } else {
-            navbar.classList.remove('scrolled');
-        }
-    });
+    function handleNavbarScroll() {
+        navbar.classList.toggle('scrolled', window.scrollY > 50);
+    }
+    window.addEventListener('scroll', handleNavbarScroll, { passive: true });
+    handleNavbarScroll(); // run on load
 
-    // Smooth scroll for navigation links
+    // Smooth scroll for anchor links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
         anchor.addEventListener('click', function (e) {
-            e.preventDefault();
             const targetId = this.getAttribute('href');
-            if(targetId === '#') return;
+            if (targetId === '#') return;
             const target = document.querySelector(targetId);
             if (target) {
-                target.scrollIntoView({
-                    behavior: 'smooth'
-                });
+                e.preventDefault();
+                const offset = parseInt(getComputedStyle(document.documentElement)
+                    .getPropertyValue('--nav-height')) || 70;
+                const top = target.getBoundingClientRect().top + window.scrollY - offset;
+                window.scrollTo({ top, behavior: 'smooth' });
             }
         });
     });
 
-    // --- Back to Top Button ---
+    // ================================================
+    // BACK TO TOP
+    // ================================================
     const backToTopBtn = document.getElementById('backToTop');
-    if(backToTopBtn) {
+    if (backToTopBtn) {
         window.addEventListener('scroll', () => {
-            if (window.scrollY > 300) {
-                backToTopBtn.classList.add('visible');
-            } else {
-                backToTopBtn.classList.remove('visible');
-            }
-        });
+            backToTopBtn.classList.toggle('visible', window.scrollY > 300);
+        }, { passive: true });
 
         backToTopBtn.addEventListener('click', () => {
-            window.scrollTo({
-                top: 0,
-                behavior: 'smooth'
-            });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     }
 
-    // --- Stats Counter Animation ---
-    const observerOptions = {
-        root: null,
-        rootMargin: '0px',
-        threshold: 0.1
-    };
-
+    // ================================================
+    // STATS COUNTER ANIMATION (IntersectionObserver)
+    // ================================================
     const statsSection = document.querySelector('#stats');
-    if(statsSection) {
+    if (statsSection) {
+        let animated = false;
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const numbers = entry.target.querySelectorAll('.stat-number');
-                    numbers.forEach(num => {
-                        const target = parseInt(num.getAttribute('data-target'));
-                        const duration = 2000; 
-                        const increment = target / (duration / 16); 
-                        let current = 0;
+                if (entry.isIntersecting && !animated) {
+                    animated = true;
+                    entry.target.querySelectorAll('.stat-number').forEach(num => {
+                        const target   = parseInt(num.getAttribute('data-target'));
+                        const duration = 2000;
+                        const step     = target / (duration / 16);
+                        let current    = 0;
 
-                        const updateNumber = () => {
-                            current += increment;
+                        const tick = () => {
+                            current += step;
                             if (current < target) {
                                 num.textContent = Math.round(current);
-                                requestAnimationFrame(updateNumber);
+                                requestAnimationFrame(tick);
                             } else {
                                 num.textContent = target + '+';
                             }
                         };
-
-                        requestAnimationFrame(updateNumber);
+                        requestAnimationFrame(tick);
                     });
                     observer.unobserve(entry.target);
                 }
             });
-        }, observerOptions);
+        }, { threshold: 0.2 });
 
         observer.observe(statsSection);
     }
 
-    // --- Testimonial Carousel ---
+    // ================================================
+    // TESTIMONIAL CAROUSEL (with dots & touch/swipe)
+    // ================================================
     const carousel = document.querySelector('.testimonial-carousel');
-    if(carousel) {
-        const cards = document.querySelectorAll('.testimonial-card');
-        const prevBtn = document.querySelector('.prev-btn');
-        const nextBtn = document.querySelector('.next-btn');
-        
-        let currentIndex = 0;
-        let cardsPerView = getCardsPerView();
-        
+    if (carousel) {
+        const cards      = Array.from(document.querySelectorAll('.testimonial-card'));
+        const prevBtn    = document.querySelector('.prev-btn');
+        const nextBtn    = document.querySelector('.next-btn');
+        const dotsWrap   = document.querySelector('.carousel-dots');
+
+        let currentIndex  = 0;
+        let cardsPerView  = getCardsPerView();
+        let totalSlides   = Math.ceil(cards.length / cardsPerView);
+        let dots          = [];
+
+        // --- Touch/swipe state ---
+        let touchStartX = 0;
+        let touchEndX   = 0;
+
         function getCardsPerView() {
             if (window.innerWidth <= 768) return 1;
             if (window.innerWidth <= 1024) return 2;
             return 3;
         }
-        
+
+        function buildDots() {
+            dotsWrap.innerHTML = '';
+            dots = [];
+            totalSlides = Math.ceil(cards.length / cardsPerView);
+            for (let i = 0; i < totalSlides; i++) {
+                const dot = document.createElement('button');
+                dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
+                dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+                dot.addEventListener('click', () => goTo(i));
+                dotsWrap.appendChild(dot);
+                dots.push(dot);
+            }
+        }
+
+        function updateDots() {
+            dots.forEach((dot, i) => dot.classList.toggle('active', i === currentIndex));
+        }
+
         function updateCarousel() {
-            const cardWidth = 100 / cardsPerView;
+            const cardPct = 100 / cardsPerView;
             cards.forEach(card => {
-                card.style.flex = `0 0 ${cardWidth}%`;
-                // Adjust margin calculation if necessary, simplified here for flex
-                // The CSS defines margin, so we might need to account for it or remove it in JS control
-                // For this implementation, we'll rely on the CSS flex-basis
+                card.style.flex = `0 0 ${cardPct}%`;
             });
-            // Simple translation
-            const translateValue = -(currentIndex * (100 / cardsPerView));
-            carousel.style.transform = `translateX(${translateValue}%)`;
+            const translatePct = -(currentIndex * 100);
+            carousel.style.transform = `translateX(${translatePct}%)`;
+            updateDots();
+
+            // Disable buttons at boundaries
+            if (prevBtn) prevBtn.disabled = currentIndex === 0;
+            if (nextBtn) nextBtn.disabled = currentIndex >= totalSlides - 1;
         }
-        
-        function nextSlide() {
-            const maxIndex = cards.length - cardsPerView;
-            if (currentIndex < maxIndex) {
-                currentIndex++;
-                updateCarousel();
-            }
+
+        function goTo(index) {
+            currentIndex = Math.max(0, Math.min(index, totalSlides - 1));
+            updateCarousel();
         }
-        
-        function prevSlide() {
-            if (currentIndex > 0) {
-                currentIndex--;
-                updateCarousel();
+
+        function next() { goTo(currentIndex + 1); }
+        function prev() { goTo(currentIndex - 1); }
+
+        if (nextBtn) nextBtn.addEventListener('click', next);
+        if (prevBtn) prevBtn.addEventListener('click', prev);
+
+        // Touch/swipe support
+        carousel.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+        }, { passive: true });
+
+        carousel.addEventListener('touchend', e => {
+            touchEndX = e.changedTouches[0].screenX;
+            const diff = touchStartX - touchEndX;
+            if (Math.abs(diff) > 50) {
+                diff > 0 ? next() : prev();
             }
-        }
-        
-        if(nextBtn) nextBtn.addEventListener('click', nextSlide);
-        if(prevBtn) prevBtn.addEventListener('click', prevSlide);
-        
-        window.addEventListener('resize', function() {
-            const newCardsPerView = getCardsPerView();
-            if (newCardsPerView !== cardsPerView) {
-                cardsPerView = newCardsPerView;
-                currentIndex = 0;
-                updateCarousel();
-            }
+        }, { passive: true });
+
+        // Keyboard navigation
+        carousel.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); prev(); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
         });
-        
-        // Initial setup
+
+        // Resize handler
+        let resizeTimer;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => {
+                const newCPV = getCardsPerView();
+                if (newCPV !== cardsPerView) {
+                    cardsPerView  = newCPV;
+                    currentIndex  = 0;
+                    buildDots();
+                    updateCarousel();
+                }
+            }, 150);
+        });
+
+        // Init
+        buildDots();
         updateCarousel();
     }
 
-    // --- FAQ Accordion ---
-    const faqQuestions = document.querySelectorAll('.faq-question');
-    faqQuestions.forEach(question => {
+    // ================================================
+    // FAQ ACCORDION (accessible)
+    // ================================================
+    document.querySelectorAll('.faq-question').forEach(question => {
         question.addEventListener('click', () => {
-            const faqItem = question.parentElement;
-            // Close others (optional)
-            // document.querySelectorAll('.faq-item').forEach(item => {
-            //     if(item !== faqItem) item.classList.remove('active');
-            // });
-            faqItem.classList.toggle('active');
+            const item     = question.parentElement;
+            const isActive = item.classList.contains('active');
+
+            // Close all
+            document.querySelectorAll('.faq-item').forEach(el => {
+                el.classList.remove('active');
+                el.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+            });
+
+            // Open clicked (unless it was already open)
+            if (!isActive) {
+                item.classList.add('active');
+                question.setAttribute('aria-expanded', 'true');
+            }
         });
     });
 
-    // --- Live Chat Widget ---
-    const chatToggle = document.querySelector('.chat-toggle');
-    const chatContainer = document.querySelector('.chat-container');
-    const closeChat = document.querySelector('.close-chat');
-    const sendMessage = document.querySelector('.send-message');
-    const chatInput = document.querySelector('.chat-input input');
-    const chatMessages = document.querySelector('.chat-messages');
 
-    if (chatToggle && chatContainer) {
-        chatToggle.addEventListener('click', () => {
-            const isVisible = chatContainer.style.display === 'flex' || chatContainer.classList.contains('active');
-            if (isVisible) {
-                chatContainer.style.display = 'none';
-                chatContainer.classList.remove('active');
-            } else {
-                chatContainer.style.display = 'flex';
-                // Small delay to allow display flex to apply before opacity transition if we had one
-                setTimeout(() => chatContainer.classList.add('active'), 10);
-                if(chatInput) chatInput.focus();
-            }
-        });
-
-        if(closeChat) {
-            closeChat.addEventListener('click', () => {
-                chatContainer.style.display = 'none';
-                chatContainer.classList.remove('active');
-            });
-        }
-
-        function sendChatMessage() {
-            if(!chatInput || !chatMessages) return;
-            const message = chatInput.value.trim();
-            if (message) {
-                const messageElement = document.createElement('div');
-                messageElement.className = 'message user-message';
-                messageElement.innerHTML = `<p>${escapeHtml(message)}</p>`;
-                chatMessages.appendChild(messageElement);
-                chatInput.value = '';
-                chatMessages.scrollTop = chatMessages.scrollHeight;
-
-                // Simulate auto-reply
-                setTimeout(() => {
-                    const autoReply = document.createElement('div');
-                    autoReply.className = 'message bot-message';
-                    autoReply.innerHTML = `<p>Thanks for your message! Our team will get back to you shortly.</p>`;
-                    chatMessages.appendChild(autoReply);
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                }, 1000);
-            }
-        }
-
-        if(sendMessage) sendMessage.addEventListener('click', sendChatMessage);
-        
-        if(chatInput) {
-            chatInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') sendChatMessage();
-            });
-        }
-    }
-    
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    // --- Calendar Implementation ---
+    // CALENDAR
+    // ================================================
     const calendarGrid = document.querySelector('.calendar-grid');
-    if(calendarGrid) {
-        const currentMonthElement = document.querySelector('.current-month');
-        const prevMonthBtn = document.querySelector('.prev-month');
-        const nextMonthBtn = document.querySelector('.next-month');
+    if (calendarGrid) {
+        const currentMonthEl = document.querySelector('.current-month');
+        const prevMonthBtn   = document.querySelector('.prev-month');
+        const nextMonthBtn   = document.querySelector('.next-month');
 
-        let currentDate = new Date();
-        let currentMonth = currentDate.getMonth();
-        let currentYear = currentDate.getFullYear();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        let viewMonth = today.getMonth();
+        let viewYear  = today.getFullYear();
 
-        function updateCalendar() {
-            const firstDay = new Date(currentYear, currentMonth, 1);
-            const lastDay = new Date(currentYear, currentMonth + 1, 0);
-            const startingDay = firstDay.getDay();
-            const monthLength = lastDay.getDate();
+        const monthNames = ['January','February','March','April','May','June',
+                            'July','August','September','October','November','December'];
 
-            if(currentMonthElement) currentMonthElement.textContent = `${firstDay.toLocaleString('default', { month: 'long' })} ${currentYear}`;
+        function renderCalendar() {
+            const firstDay   = new Date(viewYear, viewMonth, 1).getDay();
+            const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+
+            if (currentMonthEl) {
+                currentMonthEl.textContent = `${monthNames[viewMonth]} ${viewYear}`;
+            }
 
             calendarGrid.innerHTML = '';
 
-            // Add day labels
-            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            days.forEach(day => {
-                const dayLabel = document.createElement('div');
-                dayLabel.className = 'calendar-day-label';
-                dayLabel.textContent = day;
-                calendarGrid.appendChild(dayLabel);
+            // Day headers
+            ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d => {
+                const lbl = document.createElement('div');
+                lbl.className = 'calendar-day-label';
+                lbl.textContent = d;
+                lbl.setAttribute('aria-hidden', 'true');
+                calendarGrid.appendChild(lbl);
             });
 
-            // Add blank spaces for starting day
-            for (let i = 0; i < startingDay; i++) {
-                const blankDay = document.createElement('div');
-                blankDay.className = 'calendar-day empty';
-                calendarGrid.appendChild(blankDay);
+            // Blank days before first
+            for (let i = 0; i < firstDay; i++) {
+                const blank = document.createElement('div');
+                blank.className = 'calendar-day empty';
+                blank.setAttribute('aria-hidden', 'true');
+                calendarGrid.appendChild(blank);
             }
 
-            // Add days
-            for (let i = 1; i <= monthLength; i++) {
-                const dayElement = document.createElement('div');
-                dayElement.className = 'calendar-day';
-                dayElement.textContent = i;
-                
-                // Disable past dates
-                const dateToCheck = new Date(currentYear, currentMonth, i);
-                if (dateToCheck < new Date().setHours(0,0,0,0)) {
-                    dayElement.classList.add('disabled');
-                } else {
-                    dayElement.addEventListener('click', () => selectDate(i));
-                }
-                
-                calendarGrid.appendChild(dayElement);
-            }
-        }
-
-        function selectDate(day) {
+            // Day cells
             const dateInput = document.getElementById('date');
-            const selectedDate = new Date(currentYear, currentMonth, day);
-            // Format for date input: YYYY-MM-DD
-            const year = selectedDate.getFullYear();
-            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
-            const d = String(selectedDate.getDate()).padStart(2, '0');
-            
-            if(dateInput) dateInput.value = `${year}-${month}-${d}`;
-            
-            // Highlight selected day visually
+            const selectedVal = dateInput ? dateInput.value : '';
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const cell   = document.createElement('button');
+                cell.type    = 'button';
+                cell.className = 'calendar-day';
+                cell.textContent = day;
+
+                const cellDate = new Date(viewYear, viewMonth, day);
+                const cellISO  = `${viewYear}-${String(viewMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+                cell.setAttribute('aria-label', cellDate.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric' }));
+
+                if (cellDate < today) {
+                    cell.classList.add('disabled');
+                    cell.setAttribute('disabled', '');
+                    cell.setAttribute('aria-disabled', 'true');
+                } else {
+                    if (cellISO === selectedVal) cell.classList.add('selected');
+                    if (cellDate.getTime() === today.getTime()) cell.classList.add('today');
+                    cell.addEventListener('click', () => selectDate(cellISO, cell));
+                }
+
+                calendarGrid.appendChild(cell);
+            }
+        }
+
+        function selectDate(isoString, clickedCell) {
+            // Update input
+            const dateInput = document.getElementById('date');
+            if (dateInput) dateInput.value = isoString;
+
+            // Update highlight
             document.querySelectorAll('.calendar-day').forEach(el => el.classList.remove('selected'));
-            // This simple logic might need improvement to match exact element, but good for now
+            clickedCell.classList.add('selected');
         }
 
-        if(prevMonthBtn) {
-            prevMonthBtn.addEventListener('click', (e) => {
-                e.preventDefault(); // prevent form submit if inside form
-                currentMonth--;
-                if (currentMonth < 0) {
-                    currentMonth = 11;
-                    currentYear--;
-                }
-                updateCalendar();
+        if (prevMonthBtn) {
+            prevMonthBtn.addEventListener('click', () => {
+                viewMonth--;
+                if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+                renderCalendar();
             });
         }
 
-        if(nextMonthBtn) {
-            nextMonthBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                currentMonth++;
-                if (currentMonth > 11) {
-                    currentMonth = 0;
-                    currentYear++;
-                }
-                updateCalendar();
+        if (nextMonthBtn) {
+            nextMonthBtn.addEventListener('click', () => {
+                viewMonth++;
+                if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+                renderCalendar();
             });
         }
 
-        updateCalendar();
+        // Keep calendar in sync when user types in the date input
+        const dateInput = document.getElementById('date');
+        if (dateInput) {
+            dateInput.addEventListener('change', () => {
+                if (dateInput.value) {
+                    const d = new Date(dateInput.value + 'T00:00:00');
+                    viewMonth = d.getMonth();
+                    viewYear  = d.getFullYear();
+                    renderCalendar();
+                }
+            });
+        }
+
+        renderCalendar();
     }
 
-    // --- Booking Form Handling ---
+    // ================================================
+    // BOOKING FORM
+    // ================================================
     const bookingForm = document.getElementById('bookingForm');
-    if(bookingForm) {
-        bookingForm.addEventListener('submit', function(e) {
+    if (bookingForm) {
+        bookingForm.addEventListener('submit', function (e) {
             e.preventDefault();
-            
-            const formData = new FormData(this);
-            const bookingData = Object.fromEntries(formData);
-            bookingData.submissionTime = new Date().toLocaleString();
-            
-            const bookingText = `
-Booking Details:
----------------
-Date: ${bookingData.submissionTime}
-Name: ${bookingData.name}
-Email: ${bookingData.email}
-Phone: ${bookingData.phone}
-Service: ${bookingData.service}
-Preferred Date: ${bookingData.date}
-Additional Notes: ${bookingData.message}
----------------
-`;
-            // Simplified for demo - just alert
-            alert('Booking received! We will contact you shortly.');
-            this.reset();
+
+            if (!this.checkValidity()) {
+                this.reportValidity();
+                return;
+            }
+
+            const data = Object.fromEntries(new FormData(this));
+            console.info('Booking submitted:', data);
+
+            // Replace button with success message
+            const btn = this.querySelector('.submit-btn');
+            btn.textContent = '✓ Booking Received!';
+            btn.style.background = '#27ae60';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                this.reset();
+                btn.textContent  = 'Book Appointment';
+                btn.style.background = '';
+                btn.disabled     = false;
+            }, 4000);
         });
+    }
+
+    // ================================================
+    // SCROLL REVEAL (lightweight, no library)
+    // ================================================
+    const revealEls = document.querySelectorAll(
+        '.service, .feature-card, .pricing-card, .faq-item, .stat-item'
+    );
+
+    if ('IntersectionObserver' in window && revealEls.length) {
+        revealEls.forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.45s ease, transform 0.45s ease';
+        });
+
+        const revealObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+
+        revealEls.forEach(el => revealObserver.observe(el));
     }
 });
